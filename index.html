@@ -1,0 +1,1592 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>Minimal Ripple Screen</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Tone.js for synthesized sound bowl, soft raindrop water & bar chimes -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <!-- English & Decorative Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@600;700&family=Inter:wght@400;600;800;900&family=M+PLUS+Rounded+1c:wght@700;800&family=Orbitron:wght@700;900&family=Patrick+Hand&family=Playfair+Display:wght@700;900&display=swap" rel="stylesheet">
+    <style>
+        * {
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+            user-select: none;
+        }
+
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #090d16;
+            touch-action: none;
+        }
+
+        #waterCanvas {
+            position: fixed;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            display: block;
+            z-index: 0;
+        }
+
+        /* English Font Style Classes */
+        .font-style-clean { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; }
+        .font-style-round { font-family: 'M PLUS Rounded 1c', 'Fredoka', sans-serif; }
+        .font-style-fluffy { font-family: 'Fredoka', cursive, sans-serif; letter-spacing: 0.02em; }
+        .font-style-sharp { font-family: 'Orbitron', sans-serif; letter-spacing: 0.05em; }
+        .font-style-handwritten { font-family: 'Patrick Hand', cursive, sans-serif; letter-spacing: 0.03em; }
+        .font-style-classic { font-family: 'Playfair Display', Georgia, serif; }
+
+        /* Frosted Glass Panel */
+        .glass-sheet {
+            background: rgba(15, 23, 42, 0.56);
+            backdrop-filter: blur(18px);
+            -webkit-backdrop-filter: blur(18px);
+            border: 1px solid rgba(255, 255, 255, 0.24);
+        }
+
+        .glass-pill {
+            background: rgba(255, 255, 255, 0.14);
+            border: 1px solid rgba(255, 255, 255, 0.24);
+            color: #ffffff;
+            transition: all 0.18s ease;
+        }
+
+        .glass-pill:active {
+            transform: scale(0.95);
+        }
+
+        .glass-pill-active {
+            background: rgba(255, 255, 255, 0.34);
+            border-color: rgba(255, 255, 255, 0.8);
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.25);
+        }
+
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+        input[type="range"] {
+            -webkit-appearance: none;
+            appearance: none;
+            background: rgba(255, 255, 255, 0.25);
+            height: 5px;
+            border-radius: 999px;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: #ffffff;
+            cursor: pointer;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+        }
+
+        @keyframes cornerBreath {
+            0%, 100% { opacity: 0.35; }
+            50% { opacity: 0.72; }
+        }
+        .corner-trigger {
+            animation: cornerBreath 3.5s ease-in-out infinite;
+        }
+    </style>
+</head>
+<body class="font-style-clean">
+
+    <!-- FULLSCREEN PHOTO & WATER RIPPLE CANVAS -->
+    <canvas id="waterCanvas"></canvas>
+
+    <!-- DRAGGABLE & PINCH-RESIZABLE TIME & DATE -->
+    <div id="clockContainer" style="left: 50%; top: 18%; transform: translate(-50%, -50%) scale(1);" class="fixed z-10 text-center cursor-move touch-none px-4 py-2 rounded-3xl transition-shadow">
+        <div id="clockWrapper" style="color: #ffffff; opacity: 0.96;">
+            <h1 id="bigClockDisplay" class="text-7xl sm:text-8xl font-extrabold tracking-tight leading-none drop-shadow-[0_4px_20px_rgba(0,0,0,0.35)] whitespace-nowrap">
+                7:22
+            </h1>
+            <p id="bigDateDisplay" class="text-base sm:text-lg font-bold tracking-wide mt-2 drop-shadow-[0_2px_10px_rgba(0,0,0,0.4)] whitespace-nowrap">
+                Sunday, November 22
+            </p>
+        </div>
+    </div>
+
+    <!-- SUBTLE CORNER BUTTON TO REOPEN CONTROLS -->
+    <button id="reopenCornerBtn" type="button" aria-label="Open settings" class="corner-trigger fixed bottom-5 right-5 z-20 w-10 h-10 rounded-full glass-pill flex items-center justify-center text-white text-xs font-extrabold tracking-widest shadow-lg">
+        •••
+    </button>
+
+    <!-- CUSTOMIZATION DRAWER (Auto-hides after choosing photos or tapping Done) -->
+    <div id="controlDrawer" class="fixed inset-x-0 bottom-0 z-30 p-3 sm:p-4 max-w-lg mx-auto transition-all duration-300 ease-out">
+        <div class="glass-sheet rounded-3xl p-4 shadow-2xl text-white space-y-3">
+
+            <!-- Header & Done Button -->
+            <div class="flex items-center justify-between">
+                <span class="text-[11px] font-extrabold uppercase tracking-widest text-white/80">
+                    Drag clock • Pinch to resize • Double-tap screen
+                </span>
+                <button id="doneBtn" type="button" class="px-3.5 py-1 rounded-full bg-white text-slate-900 text-xs font-extrabold shadow active:scale-95 transition">
+                    Done
+                </button>
+            </div>
+
+            <!-- Row 1: Photo / Folder / Original & Auto Ripple Toggle -->
+            <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-0.5">
+                <label for="photoPicker" class="shrink-0 cursor-pointer px-3 py-1.5 rounded-full glass-pill text-xs font-extrabold flex items-center gap-1.5">
+                    <span>+ Photos</span>
+                </label>
+                <input id="photoPicker" type="file" accept="image/*" multiple class="hidden" />
+
+                <label for="folderPicker" class="shrink-0 cursor-pointer px-3 py-1.5 rounded-full glass-pill text-xs font-extrabold flex items-center gap-1.5">
+                    <span>Folder</span>
+                </label>
+                <input id="folderPicker" type="file" accept="image/*" webkitdirectory directory multiple class="hidden" />
+
+                <button id="originalBgBtn" type="button" class="shrink-0 px-3 py-1.5 rounded-full glass-pill glass-pill-active text-xs font-extrabold">
+                    Original
+                </button>
+
+                <button id="autoRippleToggleBtn" type="button" class="shrink-0 px-3 py-1.5 rounded-full glass-pill glass-pill-active text-xs font-extrabold">
+                    Auto Ripple: On
+                </button>
+            </div>
+
+            <!-- Row 2: 6 Photo Color Moods (10s each = 1 full minute per photo in Auto Cycle) -->
+            <div>
+                <div class="flex items-center justify-between mb-1">
+                    <span class="text-[10px] font-bold uppercase tracking-wider text-white/70">Photo Color Mood (60s Cycle)</span>
+                    <span id="moodStatusLabel" class="text-[10px] font-extrabold text-white/90">Auto Cycle (1/6)</span>
+                </div>
+                <div id="filterRow" class="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-0.5">
+                    <button type="button" data-filter="auto" class="filter-btn glass-pill glass-pill-active px-2.5 py-1 rounded-full text-[11px] font-extrabold shrink-0">Auto Cycle</button>
+                    <button type="button" data-filter="natural" class="filter-btn glass-pill px-2.5 py-1 rounded-full text-[11px] font-bold shrink-0">Natural</button>
+                    <button type="button" data-filter="lofi" class="filter-btn glass-pill px-2.5 py-1 rounded-full text-[11px] font-bold shrink-0">Lofi</button>
+                    <button type="button" data-filter="bw" class="filter-btn glass-pill px-2.5 py-1 rounded-full text-[11px] font-bold shrink-0">B&amp;W</button>
+                    <button type="button" data-filter="sepia" class="filter-btn glass-pill px-2.5 py-1 rounded-full text-[11px] font-bold shrink-0">Sepia</button>
+                    <button type="button" data-filter="rainbow" class="filter-btn glass-pill px-2.5 py-1 rounded-full text-[11px] font-bold shrink-0">Rainbow</button>
+                    <button type="button" data-filter="forest" class="filter-btn glass-pill px-2.5 py-1 rounded-full text-[11px] font-bold shrink-0">Magical Forest</button>
+                </div>
+            </div>
+
+            <!-- Row 3: Transparent Shiny Stamps -->
+            <div>
+                <div class="flex items-center justify-between mb-1">
+                    <span class="text-[10px] font-bold uppercase tracking-wider text-white/70">Floating Shiny Stamps</span>
+                    <span id="stampStatusLabel" class="text-[10px] font-extrabold text-white/90">None</span>
+                </div>
+                <div id="stampRow" class="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-0.5">
+                    <button type="button" data-stamp="none" class="stamp-btn glass-pill glass-pill-active px-3 py-1 rounded-full text-[11px] font-extrabold shrink-0">None</button>
+                    <button type="button" data-stamp="hearts" class="stamp-btn glass-pill px-3 py-1 rounded-full text-[11px] font-bold shrink-0">Hearts</button>
+                    <button type="button" data-stamp="stars" class="stamp-btn glass-pill px-3 py-1 rounded-full text-[11px] font-bold shrink-0">Stars</button>
+                    <button type="button" data-stamp="butterflies" class="stamp-btn glass-pill px-3 py-1 rounded-full text-[11px] font-bold shrink-0">Butterflies</button>
+                </div>
+            </div>
+
+            <!-- Row 4: Ripple Soundscape -->
+            <div>
+                <div class="flex items-center justify-between mb-1">
+                    <span class="text-[10px] font-bold uppercase tracking-wider text-white/70">Ripple Sound</span>
+                    <span id="soundStatusLabel" class="text-[10px] font-extrabold text-white/90">Off</span>
+                </div>
+                <div id="soundRow" class="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-0.5">
+                    <button type="button" data-sound="off" class="sound-btn glass-pill glass-pill-active px-3 py-1 rounded-full text-[11px] font-extrabold shrink-0">Off</button>
+                    <button type="button" data-sound="bowl" class="sound-btn glass-pill px-3 py-1 rounded-full text-[11px] font-bold shrink-0">Sound Bowl</button>
+                    <button type="button" data-sound="water" class="sound-btn glass-pill px-3 py-1 rounded-full text-[11px] font-bold shrink-0">Water Ripple</button>
+                    <button type="button" data-sound="chimes" class="sound-btn glass-pill px-3 py-1 rounded-full text-[11px] font-bold shrink-0">Bar Chimes</button>
+                </div>
+            </div>
+
+            <!-- Row 5: English Clock Font Styles -->
+            <div>
+                <div class="text-[10px] font-bold uppercase tracking-wider text-white/70 mb-1">Clock Font Style</div>
+                <div id="fontRow" class="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-0.5">
+                    <button type="button" data-font="clean" class="font-btn glass-pill glass-pill-active px-3 py-1 rounded-full text-xs font-bold shrink-0">Clean</button>
+                    <button type="button" data-font="round" class="font-btn glass-pill font-style-round px-3 py-1 rounded-full text-xs font-bold shrink-0">Round</button>
+                    <button type="button" data-font="fluffy" class="font-btn glass-pill font-style-fluffy px-3 py-1 rounded-full text-xs font-bold shrink-0">Fluffy</button>
+                    <button type="button" data-font="sharp" class="font-btn glass-pill font-style-sharp px-3 py-1 rounded-full text-xs font-bold shrink-0">Sharp</button>
+                    <button type="button" data-font="handwritten" class="font-btn glass-pill font-style-handwritten px-3 py-1 rounded-full text-sm font-bold shrink-0">Handwritten</button>
+                    <button type="button" data-font="classic" class="font-btn glass-pill font-style-classic px-3 py-1 rounded-full text-xs font-bold shrink-0">Classic</button>
+                </div>
+            </div>
+
+            <!-- Row 6: Clock Color, Size & Opacity -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-0.5">
+                <div class="flex items-center justify-between gap-1.5">
+                    <span class="text-[10px] font-bold uppercase tracking-wider text-white/70">Color</span>
+                    <div id="colorRow" class="flex items-center gap-1.5">
+                        <button type="button" data-color="#ffffff" class="color-btn w-5 h-5 rounded-full border-2 border-white shadow" style="background:#ffffff;"></button>
+                        <button type="button" data-color="#fef08a" class="color-btn w-5 h-5 rounded-full border border-white/50 shadow" style="background:#fef08a;"></button>
+                        <button type="button" data-color="#fbcfe8" class="color-btn w-5 h-5 rounded-full border border-white/50 shadow" style="background:#fbcfe8;"></button>
+                        <button type="button" data-color="#bae6fd" class="color-btn w-5 h-5 rounded-full border border-white/50 shadow" style="background:#bae6fd;"></button>
+                        <button type="button" data-color="#bbf7d0" class="color-btn w-5 h-5 rounded-full border border-white/50 shadow" style="background:#bbf7d0;"></button>
+                        <button type="button" data-color="#0f172a" class="color-btn w-5 h-5 rounded-full border border-white/50 shadow" style="background:#0f172a;"></button>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-2">
+                    <span class="text-[10px] font-bold uppercase tracking-wider text-white/70 shrink-0">Opacity</span>
+                    <input id="opacitySlider" type="range" min="0.2" max="1" step="0.02" value="0.96" class="w-full" />
+                    <span id="opacityValue" class="text-[10px] font-extrabold text-white/90 w-8 text-right">96%</span>
+                </div>
+            </div>
+
+            <!-- Row 7: Quick Position & Size Scale -->
+            <div class="flex items-center justify-between gap-2 pt-0.5">
+                <div class="flex items-center gap-1">
+                    <button type="button" data-pos="top" class="pos-btn glass-pill px-2.5 py-1 rounded-full text-[10px] font-bold">Top</button>
+                    <button type="button" data-pos="center" class="pos-btn glass-pill px-2.5 py-1 rounded-full text-[10px] font-bold">Center</button>
+                    <button type="button" data-pos="bottom" class="pos-btn glass-pill px-2.5 py-1 rounded-full text-[10px] font-bold">Bottom</button>
+                </div>
+                <div class="flex items-center gap-1.5 flex-1 max-w-[175px]">
+                    <span class="text-[10px] font-bold uppercase tracking-wider text-white/70">Size</span>
+                    <input id="scaleSlider" type="range" min="0.55" max="1.65" step="0.02" value="1" class="w-full" />
+                    <span id="scaleValue" class="text-[10px] font-extrabold text-white/90 w-8 text-right">100%</span>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- SUBTLE STATUS TOAST -->
+    <div id="toastPill" class="fixed top-6 left-1/2 -translate-x-1/2 z-40 px-4 py-1.5 rounded-full glass-sheet text-white text-xs font-bold shadow-lg opacity-0 pointer-events-none transition-opacity duration-300">
+        Double-tap anywhere for controls
+    </div>
+
+    <!-- PAYHIP LICENSE KEY UNLOCK GATE (Shown until activated once on device) -->
+    <div id="licenseGateOverlay" class="fixed inset-0 z-50 flex items-center justify-center p-5 bg-slate-950/75 backdrop-blur-xl transition-opacity duration-300">
+        <div class="glass-sheet rounded-3xl p-6 max-w-sm w-full text-center text-white shadow-2xl space-y-4">
+            <div class="w-12 h-12 mx-auto rounded-2xl bg-white/15 border border-white/30 flex items-center justify-center text-xl shadow-inner">
+                💧
+            </div>
+            <div>
+                <h2 class="text-xl font-black tracking-tight">Minimal Ripple Screen</h2>
+                <p class="text-xs text-white/75 mt-1 leading-relaxed">
+                    Enter your Payhip License Key to unlock your screen permanently on this device. Works 100% offline once activated.
+                </p>
+            </div>
+            <div class="space-y-2.5 text-left">
+                <input id="licenseKeyInput" type="text" placeholder="XXXX-XXXX-XXXX-XXXX" autocomplete="off" spellcheck="false"
+                    class="w-full px-4 py-3 rounded-2xl bg-white/10 border border-white/30 text-white placeholder-white/40 text-center text-sm font-extrabold tracking-widest uppercase focus:outline-none focus:border-white" />
+                <p id="licenseErrorMsg" class="hidden text-[11px] font-bold text-rose-300 text-center">
+                    Please enter a valid Payhip license key.
+                </p>
+                <button id="activateLicenseBtn" type="button"
+                    class="w-full py-3 rounded-2xl bg-white text-slate-900 font-black text-sm shadow-lg active:scale-95 transition">
+                    Unlock Screen
+                </button>
+            </div>
+            <p class="text-[10px] text-white/55">
+                Tip: After unlocking, tap Share → Add to Home Screen for full-screen display.
+            </p>
+        </div>
+    </div>
+
+    <script>
+        (function () {
+            // ============================================================
+            // 0. PAYHIP LICENSE GATE, OFFLINE CACHE, WAKE LOCK & AUTO-SAVE
+            // ============================================================
+            const STORAGE_KEY_LICENSE = 'minimal_ripple_unlocked_v1';
+            const STORAGE_KEY_PREFS = 'minimal_ripple_prefs_v1';
+            // Optional: Set your Payhip Product Link / Permalink if you want live API verification in addition to offline key check
+            const PAYHIP_PRODUCT_LINK = '';
+
+            const licenseOverlay = document.getElementById('licenseGateOverlay');
+            const licenseInput = document.getElementById('licenseKeyInput');
+            const licenseError = document.getElementById('licenseErrorMsg');
+            const activateBtn = document.getElementById('activateLicenseBtn');
+
+            function checkExistingLicense() {
+                try {
+                    if (localStorage.getItem(STORAGE_KEY_LICENSE) === 'true') {
+                        licenseOverlay.classList.add('hidden');
+                        return true;
+                    }
+                } catch (e) {}
+                return false;
+            }
+
+            async function verifyAndUnlockLicense() {
+                const rawKey = (licenseInput.value || '').trim();
+                licenseError.classList.add('hidden');
+
+                if (rawKey.length < 6) {
+                    licenseError.textContent = 'Please enter your Payhip license key.';
+                    licenseError.classList.remove('hidden');
+                    return;
+                }
+
+                activateBtn.disabled = true;
+                activateBtn.textContent = 'Verifying...';
+
+                let isValid = false;
+
+                // If Payhip product permalink is configured and online, verify via Payhip License API
+                if (PAYHIP_PRODUCT_LINK && navigator.onLine) {
+                    try {
+                        const res = await fetch(`https://payhip.com/api/v1/license/verify?product_link=${encodeURIComponent(PAYHIP_PRODUCT_LINK)}&license_key=${encodeURIComponent(rawKey)}`);
+                        const data = await res.json();
+                        if (data && data.data && data.data.enabled) {
+                            isValid = true;
+                        }
+                    } catch (err) {
+                        // Fallback to standard Payhip key pattern check if CORS/network restricts direct browser call
+                        isValid = /^[A-Z0-9-]{8,}$/i.test(rawKey);
+                    }
+                } else {
+                    // Standard Payhip license key format validation (works offline too)
+                    isValid = /^[A-Z0-9-]{8,}$/i.test(rawKey);
+                }
+
+                activateBtn.disabled = false;
+                activateBtn.textContent = 'Unlock Screen';
+
+                if (isValid) {
+                    try {
+                        localStorage.setItem(STORAGE_KEY_LICENSE, 'true');
+                        localStorage.setItem(STORAGE_KEY_LICENSE + '_key', rawKey);
+                    } catch (e) {}
+                    licenseOverlay.classList.add('opacity-0', 'pointer-events-none');
+                    setTimeout(() => licenseOverlay.classList.add('hidden'), 320);
+                    requestScreenWakeLock();
+                    showToast('Unlocked! Works offline anytime');
+                } else {
+                    licenseError.textContent = 'Invalid license key. Check your Payhip receipt.';
+                    licenseError.classList.remove('hidden');
+                }
+            }
+
+            activateBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                verifyAndUnlockLicense();
+            });
+
+            licenseInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') verifyAndUnlockLicense();
+            });
+
+            // Keep iPhone / Android / Desktop screen awake while open (StandBy / Desk Clock behavior)
+            let wakeLockSentinel = null;
+            async function requestScreenWakeLock() {
+                if (!('wakeLock' in navigator)) return;
+                try {
+                    wakeLockSentinel = await navigator.wakeLock.request('screen');
+                } catch (err) {}
+            }
+
+            document.addEventListener('visibilitychange', () => {
+                if (document.visibilityState === 'visible') {
+                    requestScreenWakeLock();
+                }
+            });
+
+            // Register inline Service Worker so the app works 100% offline after first load
+            function registerOfflineSupport() {
+                if (!('serviceWorker' in navigator)) return;
+                try {
+                    const swCode = `
+                        const CACHE_NAME = 'ripple-screen-offline-v1';
+                        self.addEventListener('install', (e) => {
+                            self.skipWaiting();
+                            e.waitUntil(
+                                caches.open(CACHE_NAME).then((cache) => cache.addAll([self.location.href]).catch(() => {}))
+                            );
+                        });
+                        self.addEventListener('activate', (e) => {
+                            e.waitUntil(self.clients.claim());
+                        });
+                        self.addEventListener('fetch', (e) => {
+                            if (e.request.method !== 'GET') return;
+                            e.respondWith(
+                                caches.match(e.request).then((cached) => {
+                                    const netFetch = fetch(e.request).then((res) => {
+                                        if (res && res.status === 200) {
+                                            const copy = res.clone();
+                                            caches.open(CACHE_NAME).then((c) => c.put(e.request, copy)).catch(() => {});
+                                        }
+                                        return res;
+                                    }).catch(() => cached);
+                                    return cached || netFetch;
+                                })
+                            );
+                        });
+                    `;
+                    const blob = new Blob([swCode], { type: 'application/javascript' });
+                    const swUrl = URL.createObjectURL(blob);
+                    navigator.serviceWorker.register(swUrl).catch(() => {});
+                } catch (e) {}
+            }
+
+            // ============================================================
+            // 1. LIVE CLOCK & DATE
+            // ============================================================
+            const clockContainer = document.getElementById('clockContainer');
+            const clockWrapper = document.getElementById('clockWrapper');
+            const bigClockEl = document.getElementById('bigClockDisplay');
+            const bigDateEl = document.getElementById('bigDateDisplay');
+
+            function updateClock() {
+                const now = new Date();
+                const hours = now.getHours() % 12 || 12;
+                const mins = String(now.getMinutes()).padStart(2, '0');
+                const dateStr = now.toLocaleDateString('en-US', {
+                    weekday: 'long',
+                    month: 'long',
+                    day: 'numeric'
+                });
+                bigClockEl.textContent = `${hours}:${mins}`;
+                bigDateEl.textContent = dateStr;
+            }
+            updateClock();
+            setInterval(updateClock, 1000);
+
+            // ============================================================
+            // 2. SYNTHESIZED SOUNDSCAPES (Tone.js)
+            // ============================================================
+            let soundMode = 'off'; // 'off' | 'bowl' | 'water' | 'chimes'
+            let audioInitialized = false;
+            let bowlSynth = null;
+            let chimeSynth = null;
+            let waterDropSynth = null;
+            let waterEchoSynth = null;
+            let reverbEffect = null;
+
+            async function ensureAudioReady() {
+                if (typeof Tone === 'undefined') return false;
+                try {
+                    if (Tone.context.state !== 'running') {
+                        await Tone.start();
+                    }
+                    if (!audioInitialized) {
+                        reverbEffect = new Tone.Reverb({ decay: 2.8, wet: 0.38 }).toDestination();
+
+                        // Tibetan Sound Bowl
+                        bowlSynth = new Tone.PolySynth(Tone.Synth, {
+                            oscillator: { type: 'sine' },
+                            envelope: { attack: 0.14, decay: 1.5, sustain: 0.25, release: 2.8 }
+                        }).connect(reverbEffect);
+                        bowlSynth.volume.value = -10;
+
+                        // Bar Chimes (Mark Tree shimmer sweep)
+                        chimeSynth = new Tone.PolySynth(Tone.Synth, {
+                            oscillator: { type: 'sine' },
+                            envelope: { attack: 0.004, decay: 0.65, sustain: 0.02, release: 2.1 }
+                        }).connect(reverbEffect);
+                        chimeSynth.volume.value = -12;
+
+                        // Glass Water Droplet (Primary resonant cavity bubble pop)
+                        waterDropSynth = new Tone.Synth({
+                            oscillator: { type: 'sine' },
+                            envelope: { attack: 0.003, decay: 0.24, sustain: 0, release: 0.18 }
+                        }).connect(reverbEffect);
+                        waterDropSynth.volume.value = -2;
+
+                        // Secondary delicate ripple droplet harmonic
+                        waterEchoSynth = new Tone.Synth({
+                            oscillator: { type: 'sine' },
+                            envelope: { attack: 0.003, decay: 0.18, sustain: 0, release: 0.14 }
+                        }).connect(reverbEffect);
+                        waterEchoSynth.volume.value = -7;
+
+                        audioInitialized = true;
+                    }
+                    return true;
+                } catch (err) {
+                    return false;
+                }
+            }
+
+            async function playRippleSound(isSlideSwitch) {
+                if (soundMode === 'off') return;
+                const ready = await ensureAudioReady();
+                if (!ready) return;
+
+                const now = Tone.now();
+                if (soundMode === 'bowl') {
+                    const bowlChords = [
+                        ['C4', 'G4', 'E5'],
+                        ['D4', 'A4', 'F#5'],
+                        ['F4', 'C5', 'A5']
+                    ];
+                    const chord = bowlChords[Math.floor(Math.random() * bowlChords.length)];
+                    bowlSynth.triggerAttackRelease(chord[0], '2n', now);
+                    bowlSynth.triggerAttackRelease(chord[1], '2n', now + 0.06);
+                    if (isSlideSwitch) {
+                        bowlSynth.triggerAttackRelease(chord[2], '2n', now + 0.14);
+                    }
+                } else if (soundMode === 'water') {
+                    // Authentic water droplet falling into a full glass of water (upward pitch chirp)
+                    const baseFreq = isSlideSwitch ? 390 : (410 + Math.random() * 80);
+                    const peakFreq = baseFreq * 2.65;
+
+                    waterDropSynth.frequency.cancelScheduledValues(now);
+                    waterDropSynth.frequency.setValueAtTime(baseFreq, now);
+                    waterDropSynth.frequency.exponentialRampToValueAtTime(peakFreq, now + 0.14);
+                    waterDropSynth.triggerAttackRelease(baseFreq, 0.24, now, 0.95);
+
+                    // Delicate secondary splash droplet on slide switch
+                    if (isSlideSwitch) {
+                        const echoStart = now + 0.19;
+                        const echoBase = baseFreq * 1.38;
+                        waterEchoSynth.frequency.cancelScheduledValues(echoStart);
+                        waterEchoSynth.frequency.setValueAtTime(echoBase, echoStart);
+                        waterEchoSynth.frequency.exponentialRampToValueAtTime(echoBase * 2.35, echoStart + 0.11);
+                        waterEchoSynth.triggerAttackRelease(echoBase, 0.18, echoStart, 0.72);
+                    }
+                } else if (soundMode === 'chimes') {
+                    // Shimmering Mark Tree / Bar Chimes sweep
+                    const barChimeScale = ['C6', 'D6', 'E6', 'G6', 'A6', 'B6', 'C7', 'D7', 'E7', 'G7', 'A7'];
+                    const count = isSlideSwitch ? barChimeScale.length : 6;
+                    const startOffset = isSlideSwitch ? 0 : Math.floor(Math.random() * 5);
+                    for (let i = 0; i < count; i++) {
+                        const note = barChimeScale[(startOffset + i) % barChimeScale.length];
+                        chimeSynth.triggerAttackRelease(note, '16n', now + i * 0.042, 0.42);
+                    }
+                }
+            }
+
+            // ============================================================
+            // 3. CRISP FULL-RES PHOTO + 6 COLOR MOODS + WATER RIPPLE ENGINE
+            // ============================================================
+            const canvas = document.getElementById('waterCanvas');
+            const ctx = canvas.getContext('2d');
+            const offscreen = document.createElement('canvas');
+            const octx = offscreen.getContext('2d');
+            const blitCanvas = document.createElement('canvas');
+            const bctx = blitCanvas.getContext('2d');
+            const fullResMoodCanvas = document.createElement('canvas');
+            const fullResMoodCtx = fullResMoodCanvas.getContext('2d');
+
+            const sim = {
+                scale: 3,
+                cols: 0,
+                rows: 0,
+                curr: null,
+                prev: null,
+                damping: 0.942,
+                basePixels: null,
+                outImage: null,
+                isRippling: false
+            };
+
+            const slideshow = {
+                mode: 'original',
+                images: [],
+                index: 0,
+                moodStep: 0,
+                autoRipple: true,
+                rippleDurationMs: 1500,
+                solidHoldMs: 10000, // 10s per color x 6 colors = 60s per picture
+                filterMode: 'auto', // 'auto' | 'natural' | 'lofi' | 'bw' | 'sepia' | 'rainbow' | 'forest'
+                autoFilterList: ['natural', 'lofi', 'bw', 'sepia', 'rainbow', 'forest'],
+                timerId: null
+            };
+
+            const stampSystem = {
+                type: 'none', // 'none' | 'hearts' | 'stars' | 'butterflies'
+                items: []
+            };
+
+            function getActiveFilterKey() {
+                if (slideshow.filterMode === 'auto') {
+                    return slideshow.autoFilterList[slideshow.moodStep % slideshow.autoFilterList.length];
+                }
+                return slideshow.filterMode;
+            }
+
+            // Pixel-level color grading + Magical Forest disco spotlights
+            function applyPixelColorMood(targetCtx, w, h, filterKey) {
+                if (!filterKey || filterKey === 'natural') return;
+
+                const imgData = targetCtx.getImageData(0, 0, w, h);
+                const d = imgData.data;
+
+                for (let y = 0; y < h; y++) {
+                    const ny = y / Math.max(1, h);
+                    for (let x = 0; x < w; x++) {
+                        const nx = x / Math.max(1, w);
+                        const i = (y * w + x) * 4;
+                        let r = d[i];
+                        let g = d[i + 1];
+                        let b = d[i + 2];
+
+                        if (filterKey === 'bw') {
+                            const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+                            const contrast = (lum - 128) * 1.28 + 128;
+                            r = g = b = contrast;
+                        } else if (filterKey === 'sepia') {
+                            const sr = r * 0.393 + g * 0.769 + b * 0.189;
+                            const sg = r * 0.349 + g * 0.686 + b * 0.168;
+                            const sb = r * 0.272 + g * 0.534 + b * 0.131;
+                            r = sr * 1.06;
+                            g = sg * 1.02;
+                            b = sb * 0.92;
+                        } else if (filterKey === 'lofi') {
+                            r = r * 1.16 + 18;
+                            g = g * 1.04 + 8;
+                            b = b * 0.82 + 24;
+                        } else if (filterKey === 'rainbow') {
+                            const wave = (nx * 0.65 + ny * 0.55) * Math.PI * 2;
+                            const pr = 127 + 127 * Math.sin(wave);
+                            const pg = 127 + 127 * Math.sin(wave + 2.094);
+                            const pb = 127 + 127 * Math.sin(wave + 4.188);
+                            r = r * 0.64 + pr * 0.42;
+                            g = g * 0.64 + pg * 0.42;
+                            b = b * 0.64 + pb * 0.42;
+                        } else if (filterKey === 'forest') {
+                            // Deep moody midnight forest base
+                            const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+                            r = r * 0.28 + lum * 0.08;
+                            g = g * 0.56 + lum * 0.18 + 12;
+                            b = b * 0.44 + lum * 0.14 + 16;
+                        }
+
+                        d[i] = r < 0 ? 0 : (r > 255 ? 255 : r);
+                        d[i + 1] = g < 0 ? 0 : (g > 255 ? 255 : g);
+                        d[i + 2] = b < 0 ? 0 : (b > 255 ? 255 : b);
+                    }
+                }
+                targetCtx.putImageData(imgData, 0, 0);
+
+                // Animated moving disco spotlights in the dark for Magical Forest
+                if (filterKey === 'forest') {
+                    const t = performance.now() * 0.0012;
+                    targetCtx.save();
+                    targetCtx.globalCompositeOperation = 'screen';
+
+                    const beams = [
+                        {
+                            x: w * (0.5 + 0.34 * Math.sin(t * 1.1)),
+                            y: h * (0.42 + 0.28 * Math.cos(t * 0.85)),
+                            r: Math.min(w, h) * 0.44,
+                            c1: 'rgba(52, 211, 153, 0.58)',
+                            c2: 'rgba(16, 185, 129, 0.18)'
+                        },
+                        {
+                            x: w * (0.5 + 0.36 * Math.cos(t * 0.9 + 1.4)),
+                            y: h * (0.55 + 0.26 * Math.sin(t * 1.25 + 0.8)),
+                            r: Math.min(w, h) * 0.40,
+                            c1: 'rgba(192, 132, 252, 0.52)',
+                            c2: 'rgba(139, 92, 246, 0.16)'
+                        },
+                        {
+                            x: w * (0.5 + 0.30 * Math.sin(t * 1.45 + 2.6)),
+                            y: h * (0.48 + 0.30 * Math.cos(t * 1.05 + 2.1)),
+                            r: Math.min(w, h) * 0.36,
+                            c1: 'rgba(56, 189, 248, 0.48)',
+                            c2: 'rgba(14, 165, 233, 0.14)'
+                        }
+                    ];
+
+                    beams.forEach((beam) => {
+                        const grad = targetCtx.createRadialGradient(beam.x, beam.y, 4, beam.x, beam.y, beam.r);
+                        grad.addColorStop(0, beam.c1);
+                        grad.addColorStop(0.55, beam.c2);
+                        grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+                        targetCtx.fillStyle = grad;
+                        targetCtx.fillRect(0, 0, w, h);
+                    });
+
+                    targetCtx.restore();
+                }
+            }
+
+            function drawImageCover(targetCtx, img, targetW, targetH) {
+                const iw = img.naturalWidth || img.width || 1;
+                const ih = img.naturalHeight || img.height || 1;
+                const imgRatio = iw / ih;
+                const targetRatio = targetW / targetH;
+                let drawW, drawH, offsetX, offsetY;
+                if (imgRatio > targetRatio) {
+                    drawH = targetH;
+                    drawW = targetH * imgRatio;
+                    offsetX = (targetW - drawW) / 2;
+                    offsetY = 0;
+                } else {
+                    drawW = targetW;
+                    drawH = targetW / imgRatio;
+                    offsetX = 0;
+                    offsetY = (targetH - drawH) / 2;
+                }
+                targetCtx.drawImage(img, offsetX, offsetY, drawW, drawH);
+            }
+
+            function drawOriginalScene(targetCtx, w, h, sceneIdx) {
+                const palettes = [
+                    ['#0f172a', '#1e3a8a', '#f472b6', '#fde68a'],
+                    ['#064e3b', '#0284c7', '#38bdf8', '#e0f2fe'],
+                    ['#311042', '#7e22ce', '#fb7185', '#fed7aa']
+                ];
+                const pal = palettes[sceneIdx % palettes.length];
+                const sky = targetCtx.createLinearGradient(0, 0, 0, h * 0.65);
+                sky.addColorStop(0, pal[0]);
+                sky.addColorStop(0.55, pal[1]);
+                sky.addColorStop(1, pal[2]);
+                targetCtx.fillStyle = sky;
+                targetCtx.fillRect(0, 0, w, h * 0.65);
+
+                const sunX = w * (0.28 + 0.22 * (sceneIdx % 3));
+                const sunY = h * 0.56;
+                const glow = targetCtx.createRadialGradient(sunX, sunY, 4, sunX, sunY, w * 0.42);
+                glow.addColorStop(0, pal[3]);
+                glow.addColorStop(0.45, 'rgba(253, 230, 138, 0.35)');
+                glow.addColorStop(1, 'rgba(253, 230, 138, 0)');
+                targetCtx.fillStyle = glow;
+                targetCtx.fillRect(0, 0, w, h * 0.65);
+
+                const sea = targetCtx.createLinearGradient(0, h * 0.65, 0, h);
+                sea.addColorStop(0, pal[1]);
+                sea.addColorStop(1, pal[0]);
+                targetCtx.fillStyle = sea;
+                targetCtx.fillRect(0, h * 0.65, w, h * 0.35);
+            }
+
+            function drawSharpCurrentSlideFullRes() {
+                const w = canvas.width;
+                const h = canvas.height;
+                if (w === 0 || h === 0) return;
+
+                const filterKey = getActiveFilterKey();
+                fullResMoodCanvas.width = w;
+                fullResMoodCanvas.height = h;
+                fullResMoodCtx.save();
+                fullResMoodCtx.clearRect(0, 0, w, h);
+
+                if (slideshow.mode === 'custom' && slideshow.images.length > 0) {
+                    const activeImg = slideshow.images[slideshow.index % slideshow.images.length];
+                    drawImageCover(fullResMoodCtx, activeImg, w, h);
+                } else {
+                    drawOriginalScene(fullResMoodCtx, w, h, slideshow.index);
+                }
+
+                applyPixelColorMood(fullResMoodCtx, w, h, filterKey);
+                fullResMoodCtx.restore();
+
+                ctx.clearRect(0, 0, w, h);
+                ctx.drawImage(fullResMoodCanvas, 0, 0, w, h);
+            }
+
+            function renderCurrentSlideToBuffer() {
+                const w = sim.cols;
+                const h = sim.rows;
+                if (w === 0 || h === 0) return;
+
+                const filterKey = getActiveFilterKey();
+                offscreen.width = w;
+                offscreen.height = h;
+                octx.save();
+                octx.clearRect(0, 0, w, h);
+
+                if (slideshow.mode === 'custom' && slideshow.images.length > 0) {
+                    const activeImg = slideshow.images[slideshow.index % slideshow.images.length];
+                    drawImageCover(octx, activeImg, w, h);
+                } else {
+                    drawOriginalScene(octx, w, h, slideshow.index);
+                }
+
+                applyPixelColorMood(octx, w, h, filterKey);
+                octx.restore();
+
+                sim.basePixels = octx.getImageData(0, 0, w, h).data;
+                sim.outImage = octx.createImageData(w, h);
+            }
+
+            function resizeSimulation() {
+                canvas.width = window.innerWidth;
+                canvas.height = window.innerHeight;
+                sim.cols = Math.max(1, Math.floor(canvas.width / sim.scale));
+                sim.rows = Math.max(1, Math.floor(canvas.height / sim.scale));
+                sim.curr = new Float32Array(sim.cols * sim.rows);
+                sim.prev = new Float32Array(sim.cols * sim.rows);
+                blitCanvas.width = sim.cols;
+                blitCanvas.height = sim.rows;
+                renderCurrentSlideToBuffer();
+                drawSharpCurrentSlideFullRes();
+            }
+
+            function createWaterImpulse(screenX, screenY, radius, strength) {
+                const cols = sim.cols;
+                const rows = sim.rows;
+                if (!sim.prev || cols === 0 || rows === 0) return;
+
+                const cx = Math.floor(screenX / sim.scale);
+                const cy = Math.floor(screenY / sim.scale);
+                const r = radius || 8;
+                const s = strength || 480;
+
+                for (let y = cy - r; y <= cy + r; y++) {
+                    if (y <= 1 || y >= rows - 1) continue;
+                    for (let x = cx - r; x <= cx + r; x++) {
+                        if (x <= 1 || x >= cols - 1) continue;
+                        const distSq = (x - cx) * (x - cx) + (y - cy) * (y - cy);
+                        if (distSq <= r * r) {
+                            const falloff = 1 - Math.sqrt(distSq) / r;
+                            sim.prev[y * cols + x] += s * falloff;
+                        }
+                    }
+                }
+                sim.isRippling = true;
+            }
+
+            function clearWaterWaves() {
+                if (sim.curr) sim.curr.fill(0);
+                if (sim.prev) sim.prev.fill(0);
+                sim.isRippling = false;
+                drawSharpCurrentSlideFullRes();
+            }
+
+            // ============================================================
+            // 4. TRANSPARENT SHINY STAMPS (Hearts, Stars, Butterflies)
+            // ============================================================
+            function spawnStampParticle(initialY) {
+                const w = canvas.width || window.innerWidth;
+                const h = canvas.height || window.innerHeight;
+                return {
+                    x: Math.random() * w,
+                    y: initialY !== undefined ? initialY : h + 30 + Math.random() * 80,
+                    size: 16 + Math.random() * 20,
+                    vy: -(0.35 + Math.random() * 0.55),
+                    vx: (Math.random() - 0.5) * 0.35,
+                    phase: Math.random() * Math.PI * 2,
+                    alpha: 0,
+                    maxAlpha: 0.42 + Math.random() * 0.35,
+                    life: 0,
+                    maxLife: 340 + Math.random() * 240
+                };
+            }
+
+            function setStampType(type) {
+                stampSystem.type = type;
+                stampSystem.items = [];
+                if (type !== 'none') {
+                    const h = canvas.height || window.innerHeight;
+                    for (let i = 0; i < 14; i++) {
+                        stampSystem.items.push(spawnStampParticle(Math.random() * h));
+                    }
+                }
+                const labelMap = {
+                    none: 'None',
+                    hearts: 'Hearts',
+                    stars: 'Stars',
+                    butterflies: 'Butterflies'
+                };
+                document.getElementById('stampStatusLabel').textContent = labelMap[type] || 'None';
+            }
+
+            function drawShinyHeart(c, size) {
+                const s = size * 0.5;
+                c.beginPath();
+                c.moveTo(0, s * 0.45);
+                c.bezierCurveTo(-s * 1.15, -s * 0.35, -s * 0.65, -s * 1.2, 0, -s * 0.45);
+                c.bezierCurveTo(s * 0.65, -s * 1.2, s * 1.15, -s * 0.35, 0, s * 0.45);
+                c.closePath();
+                c.fill();
+                c.stroke();
+
+                c.fillStyle = 'rgba(255, 255, 255, 0.72)';
+                c.beginPath();
+                c.ellipse(-s * 0.34, -s * 0.42, s * 0.16, s * 0.09, -0.5, 0, Math.PI * 2);
+                c.fill();
+            }
+
+            function drawShinyStar(c, size) {
+                const outer = size * 0.55;
+                const inner = size * 0.18;
+                c.beginPath();
+                for (let i = 0; i < 8; i++) {
+                    const r = i % 2 === 0 ? outer : inner;
+                    const a = (i * Math.PI) / 4;
+                    const px = Math.cos(a) * r;
+                    const py = Math.sin(a) * r;
+                    if (i === 0) c.moveTo(px, py);
+                    else c.lineTo(px, py);
+                }
+                c.closePath();
+                c.fill();
+                c.stroke();
+            }
+
+            function drawShinyButterfly(c, size, flap) {
+                const s = size * 0.52;
+                const wingScaleX = 0.55 + 0.45 * Math.abs(Math.sin(flap));
+                c.save();
+                c.scale(wingScaleX, 1);
+
+                c.beginPath();
+                c.ellipse(-s * 0.45, -s * 0.2, s * 0.45, s * 0.3, -0.35, 0, Math.PI * 2);
+                c.ellipse(-s * 0.35, s * 0.25, s * 0.32, s * 0.22, 0.35, 0, Math.PI * 2);
+                c.fill();
+                c.stroke();
+
+                c.beginPath();
+                c.ellipse(s * 0.45, -s * 0.2, s * 0.45, s * 0.3, 0.35, 0, Math.PI * 2);
+                c.ellipse(s * 0.35, s * 0.25, s * 0.32, s * 0.22, -0.35, 0, Math.PI * 2);
+                c.fill();
+                c.stroke();
+                c.restore();
+
+                c.fillStyle = 'rgba(255, 255, 255, 0.85)';
+                c.beginPath();
+                c.ellipse(0, 0, s * 0.08, s * 0.38, 0, 0, Math.PI * 2);
+                c.fill();
+            }
+
+            function updateAndRenderStamps() {
+                if (stampSystem.type === 'none') return;
+                const w = canvas.width;
+                const h = canvas.height;
+
+                for (let i = 0; i < stampSystem.items.length; i++) {
+                    const p = stampSystem.items[i];
+                    p.life += 1;
+                    p.phase += 0.045;
+                    p.x += p.vx + Math.sin(p.phase * 0.6) * 0.35;
+                    p.y += p.vy;
+
+                    const progress = p.life / p.maxLife;
+                    const fadeEnv = progress < 0.2
+                        ? progress / 0.2
+                        : progress > 0.8
+                            ? (1 - progress) / 0.2
+                            : 1;
+                    const twinkle = 0.72 + 0.28 * Math.sin(p.phase * 2.2);
+                    const alpha = Math.max(0, p.maxAlpha * fadeEnv * twinkle);
+
+                    if (p.life >= p.maxLife || p.y < -40) {
+                        stampSystem.items[i] = spawnStampParticle();
+                        continue;
+                    }
+
+                    ctx.save();
+                    ctx.translate(p.x, p.y);
+                    ctx.rotate(Math.sin(p.phase * 0.5) * 0.16);
+                    ctx.globalAlpha = alpha;
+                    ctx.shadowColor = 'rgba(255, 255, 255, 0.85)';
+                    ctx.shadowBlur = 12;
+
+                    const grad = ctx.createRadialGradient(0, 0, 1, 0, 0, p.size * 0.6);
+                    grad.addColorStop(0, 'rgba(255, 255, 255, 0.92)');
+                    grad.addColorStop(0.65, 'rgba(255, 255, 255, 0.42)');
+                    grad.addColorStop(1, 'rgba(255, 255, 255, 0.12)');
+                    ctx.fillStyle = grad;
+                    ctx.strokeStyle = 'rgba(255, 255, 255, 0.78)';
+                    ctx.lineWidth = 1.2;
+
+                    if (stampSystem.type === 'hearts') {
+                        drawShinyHeart(ctx, p.size);
+                    } else if (stampSystem.type === 'stars') {
+                        drawShinyStar(ctx, p.size);
+                    } else if (stampSystem.type === 'butterflies') {
+                        drawShinyButterfly(ctx, p.size, p.phase * 2.4);
+                    }
+                    ctx.restore();
+                }
+            }
+
+            // ============================================================
+            // 5. SLIDESHOW CYCLE: 1 MIN PER PHOTO (6 COLORS x 10 SEC EACH)
+            // ============================================================
+            function updateMoodStatusLabel() {
+                const labelEl = document.getElementById('moodStatusLabel');
+                if (!labelEl) return;
+                const names = {
+                    natural: 'Natural',
+                    lofi: 'Lofi',
+                    bw: 'B&W',
+                    sepia: 'Sepia',
+                    rainbow: 'Rainbow',
+                    forest: 'Magical Forest'
+                };
+                if (slideshow.filterMode === 'auto') {
+                    const stepNum = (slideshow.moodStep % 6) + 1;
+                    const currentName = names[getActiveFilterKey()] || 'Natural';
+                    labelEl.textContent = `Auto (${stepNum}/6: ${currentName})`;
+                } else {
+                    labelEl.textContent = names[slideshow.filterMode] || 'Natural';
+                }
+            }
+
+            function triggerSingleRippleTransition(advanceSlide, isUserTap) {
+                const w = canvas.width || window.innerWidth;
+                const h = canvas.height || window.innerHeight;
+                const totalSlides = slideshow.mode === 'custom' && slideshow.images.length > 0
+                    ? slideshow.images.length
+                    : 3;
+
+                if (advanceSlide) {
+                    if (slideshow.filterMode === 'auto') {
+                        // Cycle 6 color moods (10s each = 60s), then advance to the next picture
+                        slideshow.moodStep = (slideshow.moodStep + 1) % 6;
+                        if (slideshow.moodStep === 0) {
+                            slideshow.index = (slideshow.index + 1) % totalSlides;
+                        }
+                    } else {
+                        slideshow.index = (slideshow.index + 1) % totalSlides;
+                    }
+                    updateMoodStatusLabel();
+                    renderCurrentSlideToBuffer();
+                }
+
+                if (slideshow.autoRipple || isUserTap) {
+                    createWaterImpulse(
+                        w * (0.35 + Math.random() * 0.3),
+                        h * (0.4 + Math.random() * 0.25),
+                        11,
+                        560
+                    );
+                    playRippleSound(true);
+                } else {
+                    clearWaterWaves();
+                }
+
+                clearTimeout(slideshow.timerId);
+                slideshow.timerId = setTimeout(() => {
+                    clearWaterWaves();
+                    slideshow.timerId = setTimeout(() => {
+                        triggerSingleRippleTransition(true, false);
+                    }, slideshow.solidHoldMs);
+                }, slideshow.rippleDurationMs);
+            }
+
+            function startSlideshowCycle() {
+                clearTimeout(slideshow.timerId);
+                renderCurrentSlideToBuffer();
+                updateMoodStatusLabel();
+                triggerSingleRippleTransition(false, false);
+            }
+
+            function renderLoop() {
+                const cols = sim.cols;
+                const rows = sim.rows;
+                if (cols > 0 && rows > 0 && sim.basePixels) {
+                    if (sim.isRippling) {
+                        const curr = sim.curr;
+                        const prev = sim.prev;
+                        const damping = sim.damping;
+                        const src = sim.basePixels;
+                        const dst = sim.outImage.data;
+                        let maxEnergy = 0;
+
+                        for (let y = 1; y < rows - 1; y++) {
+                            const rowIdx = y * cols;
+                            for (let x = 1; x < cols - 1; x++) {
+                                const i = rowIdx + x;
+                                const val = ((prev[i - 1] + prev[i + 1] + prev[i - cols] + prev[i + cols]) * 0.5 - curr[i]) * damping;
+                                curr[i] = val;
+
+                                const absVal = val < 0 ? -val : val;
+                                if (absVal > maxEnergy) maxEnergy = absVal;
+
+                                const dx = curr[i - 1] - curr[i + 1];
+                                const dy = curr[i - cols] - curr[i + cols];
+
+                                let sx = Math.floor(x + dx * 0.08);
+                                let sy = Math.floor(y + dy * 0.08);
+                                if (sx < 0) sx = 0;
+                                if (sx >= cols) sx = cols - 1;
+                                if (sy < 0) sy = 0;
+                                if (sy >= rows) sy = rows - 1;
+
+                                const sIdx = (sy * cols + sx) * 4;
+                                const dIdx = i * 4;
+                                const highlight = Math.max(-24, Math.min(44, (dx + dy) * 0.15));
+
+                                dst[dIdx] = Math.max(0, Math.min(255, src[sIdx] + highlight));
+                                dst[dIdx + 1] = Math.max(0, Math.min(255, src[sIdx + 1] + highlight));
+                                dst[dIdx + 2] = Math.max(0, Math.min(255, src[sIdx + 2] + highlight * 1.15));
+                                dst[dIdx + 3] = 255;
+                            }
+                        }
+
+                        sim.prev = curr;
+                        sim.curr = prev;
+
+                        bctx.putImageData(sim.outImage, 0, 0);
+                        ctx.clearRect(0, 0, canvas.width, canvas.height);
+                        ctx.imageSmoothingEnabled = true;
+                        ctx.imageSmoothingQuality = 'high';
+                        ctx.drawImage(blitCanvas, 0, 0, canvas.width, canvas.height);
+
+                        if (maxEnergy < 0.35) {
+                            clearWaterWaves();
+                        }
+                    } else {
+                        // Redraw full-resolution photo so Magical Forest disco beams animate smoothly
+                        drawSharpCurrentSlideFullRes();
+                    }
+
+                    updateAndRenderStamps();
+                }
+                requestAnimationFrame(renderLoop);
+            }
+
+            // ============================================================
+            // 6. DRAGGABLE & TWO-FINGER PINCH-TO-RESIZE CLOCK
+            // ============================================================
+            const clockPos = { xPercent: 50, yPercent: 18, scale: 1 };
+            let isDraggingClock = false;
+            let dragOffsetX = 0;
+            let dragOffsetY = 0;
+
+            const activePointers = new Map();
+            let initialPinchDist = 0;
+            let initialPinchScale = 1;
+
+            function applyClockTransform() {
+                clockContainer.style.left = `${clockPos.xPercent}%`;
+                clockContainer.style.top = `${clockPos.yPercent}%`;
+                clockContainer.style.transform = `translate(-50%, -50%) scale(${clockPos.scale})`;
+
+                const scaleSlider = document.getElementById('scaleSlider');
+                const scaleValue = document.getElementById('scaleValue');
+                if (scaleSlider) scaleSlider.value = clockPos.scale.toFixed(2);
+                if (scaleValue) scaleValue.textContent = `${Math.round(clockPos.scale * 100)}%`;
+            }
+
+            function getPinchDistance() {
+                const pts = Array.from(activePointers.values());
+                if (pts.length < 2) return 0;
+                return Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+            }
+
+            clockContainer.addEventListener('pointerdown', (e) => {
+                e.stopPropagation();
+                activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+                if (activePointers.size === 2) {
+                    isDraggingClock = false;
+                    initialPinchDist = getPinchDistance();
+                    initialPinchScale = clockPos.scale;
+                    return;
+                }
+
+                isDraggingClock = true;
+                const rect = clockContainer.getBoundingClientRect();
+                dragOffsetX = e.clientX - (rect.left + rect.width / 2);
+                dragOffsetY = e.clientY - (rect.top + rect.height / 2);
+            });
+
+            // ============================================================
+            // 7. DRAWER VISIBILITY, DOUBLE-TAP & CANVAS RIPPLE INTERACTION
+            // ============================================================
+            const controlDrawer = document.getElementById('controlDrawer');
+            const reopenCornerBtn = document.getElementById('reopenCornerBtn');
+            const toastPill = document.getElementById('toastPill');
+            let drawerOpen = true;
+            let lastTapTime = 0;
+            let lastTapX = 0;
+            let lastTapY = 0;
+
+            function showToast(msg) {
+                toastPill.textContent = msg;
+                toastPill.classList.remove('opacity-0');
+                clearTimeout(toastPill._t);
+                toastPill._t = setTimeout(() => toastPill.classList.add('opacity-0'), 2200);
+            }
+
+            function hideDrawer() {
+                drawerOpen = false;
+                controlDrawer.classList.add('translate-y-full', 'opacity-0', 'pointer-events-none');
+                reopenCornerBtn.classList.remove('hidden');
+                showToast('Double-tap anywhere or tap ••• to edit');
+            }
+
+            function showDrawer() {
+                drawerOpen = true;
+                controlDrawer.classList.remove('translate-y-full', 'opacity-0', 'pointer-events-none');
+                reopenCornerBtn.classList.add('hidden');
+            }
+
+            reopenCornerBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                showDrawer();
+            });
+
+            document.getElementById('doneBtn').addEventListener('click', (e) => {
+                e.stopPropagation();
+                hideDrawer();
+            });
+
+            document.addEventListener('pointerdown', (e) => {
+                if (e.target.closest('#controlDrawer') || e.target.closest('#reopenCornerBtn') || e.target.closest('#licenseGateOverlay')) return;
+
+                requestScreenWakeLock();
+                activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+                if (activePointers.size === 2) {
+                    isDraggingClock = false;
+                    initialPinchDist = getPinchDistance();
+                    initialPinchScale = clockPos.scale;
+                    return;
+                }
+
+                const now = Date.now();
+                const dt = now - lastTapTime;
+                const dist = Math.hypot(e.clientX - lastTapX, e.clientY - lastTapY);
+
+                if (dt > 40 && dt < 380 && dist < 55) {
+                    lastTapTime = 0;
+                    if (drawerOpen) hideDrawer();
+                    else showDrawer();
+                } else {
+                    lastTapTime = now;
+                    lastTapX = e.clientX;
+                    lastTapY = e.clientY;
+                }
+
+                if (!e.target.closest('#clockContainer')) {
+                    createWaterImpulse(e.clientX, e.clientY, 8, 460);
+                    playRippleSound(false);
+                }
+            });
+
+            document.addEventListener('dblclick', (e) => {
+                if (e.target.closest('#controlDrawer') || e.target.closest('#reopenCornerBtn')) return;
+                if (drawerOpen) hideDrawer();
+                else showDrawer();
+            });
+
+            document.addEventListener('pointermove', (e) => {
+                if (activePointers.has(e.pointerId)) {
+                    activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+                }
+
+                if (activePointers.size === 2 && initialPinchDist > 10) {
+                    const currentDist = getPinchDistance();
+                    const ratio = currentDist / initialPinchDist;
+                    clockPos.scale = Math.max(0.55, Math.min(1.65, initialPinchScale * ratio));
+                    applyClockTransform();
+                    return;
+                }
+
+                if (isDraggingClock) {
+                    const centerX = e.clientX - dragOffsetX;
+                    const centerY = e.clientY - dragOffsetY;
+                    clockPos.xPercent = Math.max(12, Math.min(88, (centerX / window.innerWidth) * 100));
+                    clockPos.yPercent = Math.max(8, Math.min(92, (centerY / window.innerHeight) * 100));
+                    applyClockTransform();
+                    saveUserPreferences();
+                    return;
+                }
+
+                if (e.buttons > 0 && !e.target.closest('#controlDrawer') && !e.target.closest('#clockContainer') && !e.target.closest('#licenseGateOverlay')) {
+                    createWaterImpulse(e.clientX, e.clientY, 5, 240);
+                }
+            });
+
+            function clearPointer(e) {
+                activePointers.delete(e.pointerId);
+                if (activePointers.size < 2) {
+                    initialPinchDist = 0;
+                }
+                isDraggingClock = false;
+            }
+
+            document.addEventListener('pointerup', clearPointer);
+            document.addEventListener('pointercancel', clearPointer);
+
+            // ============================================================
+            // 8. PHOTO & FOLDER PICKER HANDLERS
+            // ============================================================
+            function handleImageFiles(fileList) {
+                const files = Array.from(fileList || []).filter(f => f.type.startsWith('image/'));
+                if (files.length === 0) {
+                    showToast('No image files selected');
+                    return;
+                }
+                const loaded = [];
+                let doneCount = 0;
+                files.forEach((file) => {
+                    const reader = new FileReader();
+                    reader.onload = (ev) => {
+                        const img = new Image();
+                        img.onload = () => {
+                            loaded.push(img);
+                            doneCount++;
+                            if (doneCount === files.length) {
+                                slideshow.mode = 'custom';
+                                slideshow.images = loaded;
+                                slideshow.index = 0;
+                                slideshow.moodStep = 0;
+                                document.getElementById('originalBgBtn').classList.remove('glass-pill-active');
+                                startSlideshowCycle();
+                                hideDrawer();
+                                showToast(`${loaded.length} photo${loaded.length > 1 ? 's' : ''} loaded`);
+                            }
+                        };
+                        img.src = ev.target.result;
+                    };
+                    reader.readAsDataURL(file);
+                });
+            }
+
+            document.getElementById('photoPicker').addEventListener('change', (e) => {
+                handleImageFiles(e.target.files);
+                e.target.value = '';
+            });
+
+            document.getElementById('folderPicker').addEventListener('change', (e) => {
+                handleImageFiles(e.target.files);
+                e.target.value = '';
+            });
+
+            document.getElementById('originalBgBtn').addEventListener('click', (e) => {
+                e.stopPropagation();
+                slideshow.mode = 'original';
+                slideshow.images = [];
+                slideshow.index = 0;
+                slideshow.moodStep = 0;
+                e.currentTarget.classList.add('glass-pill-active');
+                startSlideshowCycle();
+                showToast('Original twilight waves');
+            });
+
+            // Auto Ripple On/Off button
+            document.getElementById('autoRippleToggleBtn').addEventListener('click', (e) => {
+                e.stopPropagation();
+                slideshow.autoRipple = !slideshow.autoRipple;
+                const btn = e.currentTarget;
+                btn.textContent = `Auto Ripple: ${slideshow.autoRipple ? 'On' : 'Off'}`;
+                btn.classList.toggle('glass-pill-active', slideshow.autoRipple);
+                if (!slideshow.autoRipple) {
+                    clearWaterWaves();
+                } else {
+                    triggerSingleRippleTransition(false, false);
+                }
+                saveUserPreferences();
+                showToast(slideshow.autoRipple ? 'Auto Ripple On' : 'Auto Ripple Off');
+            });
+
+            // Photo Color Mood Selector
+            document.getElementById('filterRow').addEventListener('click', (e) => {
+                const btn = e.target.closest('.filter-btn');
+                if (!btn) return;
+                e.stopPropagation();
+                document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('glass-pill-active'));
+                btn.classList.add('glass-pill-active');
+                slideshow.filterMode = btn.dataset.filter;
+                updateMoodStatusLabel();
+                renderCurrentSlideToBuffer();
+                if (slideshow.autoRipple) {
+                    createWaterImpulse(window.innerWidth * 0.5, window.innerHeight * 0.52, 9, 460);
+                } else {
+                    drawSharpCurrentSlideFullRes();
+                }
+                saveUserPreferences();
+            });
+
+            // Floating Shiny Stamp Selector
+            document.getElementById('stampRow').addEventListener('click', (e) => {
+                const btn = e.target.closest('.stamp-btn');
+                if (!btn) return;
+                e.stopPropagation();
+                document.querySelectorAll('.stamp-btn').forEach(b => b.classList.remove('glass-pill-active'));
+                btn.classList.add('glass-pill-active');
+                setStampType(btn.dataset.stamp);
+                saveUserPreferences();
+            });
+
+            // Ripple Soundscape Selector
+            document.getElementById('soundRow').addEventListener('click', (e) => {
+                const btn = e.target.closest('.sound-btn');
+                if (!btn) return;
+                e.stopPropagation();
+                document.querySelectorAll('.sound-btn').forEach(b => b.classList.remove('glass-pill-active'));
+                btn.classList.add('glass-pill-active');
+                soundMode = btn.dataset.sound;
+                const labels = {
+                    off: 'Off',
+                    bowl: 'Sound Bowl',
+                    water: 'Water Ripple',
+                    chimes: 'Bar Chimes'
+                };
+                document.getElementById('soundStatusLabel').textContent = labels[soundMode] || 'Off';
+                if (soundMode !== 'off') {
+                    playRippleSound(false);
+                }
+                saveUserPreferences();
+            });
+
+            // ============================================================
+            // 9. FONT, COLOR, OPACITY, POSITION & SIZE CONTROLS + AUTO-SAVE
+            // ============================================================
+            let currentFontKey = 'clean';
+            let currentColorHex = '#ffffff';
+            let currentOpacity = 0.96;
+
+            function saveUserPreferences() {
+                try {
+                    const prefs = {
+                        autoRipple: slideshow.autoRipple,
+                        filterMode: slideshow.filterMode,
+                        stampType: stampSystem.type,
+                        soundMode: soundMode,
+                        fontKey: currentFontKey,
+                        colorHex: currentColorHex,
+                        opacity: currentOpacity,
+                        xPercent: clockPos.xPercent,
+                        yPercent: clockPos.yPercent,
+                        scale: clockPos.scale
+                    };
+                    localStorage.setItem(STORAGE_KEY_PREFS, JSON.stringify(prefs));
+                } catch (e) {}
+            }
+
+            function loadUserPreferences() {
+                try {
+                    const raw = localStorage.getItem(STORAGE_KEY_PREFS);
+                    if (!raw) return;
+                    const p = JSON.parse(raw);
+
+                    if (typeof p.autoRipple === 'boolean') {
+                        slideshow.autoRipple = p.autoRipple;
+                        const btn = document.getElementById('autoRippleToggleBtn');
+                        btn.textContent = `Auto Ripple: ${slideshow.autoRipple ? 'On' : 'Off'}`;
+                        btn.classList.toggle('glass-pill-active', slideshow.autoRipple);
+                    }
+                    if (p.filterMode) {
+                        slideshow.filterMode = p.filterMode;
+                        document.querySelectorAll('.filter-btn').forEach(b => {
+                            b.classList.toggle('glass-pill-active', b.dataset.filter === p.filterMode);
+                        });
+                    }
+                    if (p.stampType) {
+                        setStampType(p.stampType);
+                        document.querySelectorAll('.stamp-btn').forEach(b => {
+                            b.classList.toggle('glass-pill-active', b.dataset.stamp === p.stampType);
+                        });
+                    }
+                    if (p.soundMode) {
+                        soundMode = p.soundMode;
+                        const labels = { off: 'Off', bowl: 'Sound Bowl', water: 'Water Ripple', chimes: 'Bar Chimes' };
+                        document.getElementById('soundStatusLabel').textContent = labels[soundMode] || 'Off';
+                        document.querySelectorAll('.sound-btn').forEach(b => {
+                            b.classList.toggle('glass-pill-active', b.dataset.sound === p.soundMode);
+                        });
+                    }
+                    if (p.fontKey && fontMap[p.fontKey]) {
+                        currentFontKey = p.fontKey;
+                        Object.values(fontMap).forEach(cls => clockWrapper.classList.remove(cls));
+                        clockWrapper.classList.add(fontMap[p.fontKey]);
+                        document.querySelectorAll('.font-btn').forEach(b => {
+                            b.classList.toggle('glass-pill-active', b.dataset.font === p.fontKey);
+                        });
+                    }
+                    if (p.colorHex) {
+                        currentColorHex = p.colorHex;
+                        clockWrapper.style.color = p.colorHex;
+                        document.querySelectorAll('.color-btn').forEach(b => {
+                            const match = b.dataset.color === p.colorHex;
+                            b.classList.toggle('border-2', match);
+                            b.classList.toggle('border-white', match);
+                            b.classList.toggle('scale-110', match);
+                            b.classList.toggle('border', !match);
+                            b.classList.toggle('border-white/50', !match);
+                        });
+                    }
+                    if (typeof p.opacity === 'number') {
+                        currentOpacity = p.opacity;
+                        clockWrapper.style.opacity = p.opacity;
+                        document.getElementById('opacitySlider').value = p.opacity;
+                        document.getElementById('opacityValue').textContent = `${Math.round(p.opacity * 100)}%`;
+                    }
+                    if (typeof p.xPercent === 'number') clockPos.xPercent = p.xPercent;
+                    if (typeof p.yPercent === 'number') clockPos.yPercent = p.yPercent;
+                    if (typeof p.scale === 'number') clockPos.scale = p.scale;
+                    applyClockTransform();
+                } catch (e) {}
+            }
+
+            const fontMap = {
+                clean: 'font-style-clean',
+                round: 'font-style-round',
+                fluffy: 'font-style-fluffy',
+                sharp: 'font-style-sharp',
+                handwritten: 'font-style-handwritten',
+                classic: 'font-style-classic'
+            };
+
+            document.getElementById('fontRow').addEventListener('click', (e) => {
+                const btn = e.target.closest('.font-btn');
+                if (!btn) return;
+                e.stopPropagation();
+                document.querySelectorAll('.font-btn').forEach(b => b.classList.remove('glass-pill-active'));
+                btn.classList.add('glass-pill-active');
+
+                currentFontKey = btn.dataset.font || 'clean';
+                Object.values(fontMap).forEach(cls => clockWrapper.classList.remove(cls));
+                clockWrapper.classList.add(fontMap[currentFontKey] || 'font-style-clean');
+                saveUserPreferences();
+            });
+
+            document.getElementById('colorRow').addEventListener('click', (e) => {
+                const btn = e.target.closest('.color-btn');
+                if (!btn) return;
+                e.stopPropagation();
+                document.querySelectorAll('.color-btn').forEach(b => {
+                    b.classList.remove('border-2', 'border-white', 'scale-110');
+                    b.classList.add('border', 'border-white/50');
+                });
+                btn.classList.remove('border', 'border-white/50');
+                btn.classList.add('border-2', 'border-white', 'scale-110');
+                currentColorHex = btn.dataset.color;
+                clockWrapper.style.color = currentColorHex;
+                saveUserPreferences();
+            });
+
+            document.getElementById('opacitySlider').addEventListener('input', (e) => {
+                e.stopPropagation();
+                const val = parseFloat(e.target.value);
+                currentOpacity = val;
+                clockWrapper.style.opacity = val;
+                document.getElementById('opacityValue').textContent = `${Math.round(val * 100)}%`;
+                saveUserPreferences();
+            });
+
+            document.getElementById('scaleSlider').addEventListener('input', (e) => {
+                e.stopPropagation();
+                clockPos.scale = parseFloat(e.target.value);
+                applyClockTransform();
+                saveUserPreferences();
+            });
+
+            document.querySelectorAll('.pos-btn').forEach((btn) => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const pos = btn.dataset.pos;
+                    if (pos === 'top') { clockPos.xPercent = 50; clockPos.yPercent = 18; }
+                    if (pos === 'center') { clockPos.xPercent = 50; clockPos.yPercent = 45; }
+                    if (pos === 'bottom') { clockPos.xPercent = 50; clockPos.yPercent = 76; }
+                    applyClockTransform();
+                    saveUserPreferences();
+                });
+            });
+
+            // ============================================================
+            // 10. INITIALIZE ON WINDOW LOAD
+            // ============================================================
+            window.addEventListener('resize', resizeSimulation);
+
+            window.onload = function () {
+                reopenCornerBtn.classList.add('hidden');
+                const alreadyUnlocked = checkExistingLicense();
+                loadUserPreferences();
+                registerOfflineSupport();
+                if (alreadyUnlocked) {
+                    requestScreenWakeLock();
+                }
+                resizeSimulation();
+                startSlideshowCycle();
+                renderLoop();
+            };
+        })();
+    </script>
+</body>
+</html>
